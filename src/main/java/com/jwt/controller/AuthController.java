@@ -1,0 +1,180 @@
+package com.jwt.controller;
+
+import com.jwt.event.OnUserLoggedInEvent;
+import com.jwt.model.AccessToken;
+import com.jwt.model.RefreshToken;
+import com.jwt.payload.request.LoginRequest;
+import com.jwt.payload.request.RegisterRequest;
+import com.jwt.payload.response.ApiResponse;
+import com.jwt.payload.response.LoginResponse;
+import com.jwt.payload.response.RefreshResponse;
+import com.jwt.security.UserDetailsImpl;
+import com.jwt.service.AuthService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import javax.servlet.http.HttpServletResponse;
+import javax.validation.Valid;
+import java.util.Set;
+
+/**
+ * Class provides authentication methods.
+ */
+@CrossOrigin(origins = "*", maxAge = 3600)
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+
+    @Value("${app.config.jwt.refresh.cookie}")
+    private String refreshJwtCookieName;
+
+    private AuthService authService;
+    private ApplicationEventPublisher applicationEventPublisher;
+
+    @Autowired
+    public AuthController(AuthService authService, ApplicationEventPublisher applicationEventPublisher) {
+        this.authService = authService;
+        this.applicationEventPublisher = applicationEventPublisher;
+    }
+
+    /**
+     * Entry point for the user login process.
+     * Operations:
+     *  - Authenticate user.
+     *  - Generate access and refresh tokens.
+     *  - Add refresh token to the cookies.
+     *  - Fetch user authorities.
+     *  - Publish login event on success.
+     */
+    @Operation(summary = "Login user.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "User logged in successfully. Provided below is payload schema.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = LoginResponse.class)) }),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "Wrong credentials provided.",
+                    content = @Content)})
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest, HttpServletResponse response) {
+        // authenticate user
+        final UserDetailsImpl userDetails = authService.authenticateUser(loginRequest);
+        // issue new access and refresh tokens
+        final AccessToken accessToken = authService.generateAccessToken(userDetails.getId());
+        final RefreshToken refreshToken = authService.generateRefreshToken(userDetails.getId());
+        // add cookie to the response
+        authService.addCookieToTheResponse(response, authService.createRefreshTokenCookie(refreshToken));
+        // get user authorities
+        Set<String> setOfAuthorities = authService.getSetOfAuthorities(userDetails);
+        // publish login event
+        final OnUserLoggedInEvent userLoggedInEvent = new OnUserLoggedInEvent(userDetails);
+        applicationEventPublisher.publishEvent(userLoggedInEvent);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new ApiResponse<>(false,
+                        "Authentication success!",
+                        new LoginResponse(accessToken.getToken(),
+                                accessToken.getExpiredInSeconds(),
+                                refreshToken.getToken(),
+                                setOfAuthorities)));
+    }
+
+    /**
+     * Endpoint for refreshing access and refresh tokens.
+     * Operations:
+     * - Validate and fetch passed refresh token.
+     * - Issue new access and update passed refresh token.
+     * - Add updated refresh token to the cookies.
+     */
+    @Operation(summary = "Refresh tokens.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "Token refreshed successfully.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = RefreshResponse.class)) }),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "Invalid token.",
+                    content = @Content)})
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@CookieValue(name="RefreshToken") String refreshJwt, // Don't forget to change annotation name if u changed it in app.props
+                                     HttpServletResponse response) {
+        // validate provided refresh token and fetch its model
+        final RefreshToken oldRefreshToken = authService.validateRefreshTokenAndFetchItsModel(refreshJwt);
+        // generate new tokens
+        final AccessToken newAccessToken = authService.generateAccessToken(oldRefreshToken.getUserId());
+        final RefreshToken updatedRefreshToken = authService.updateRefreshToken(oldRefreshToken);
+        // add refresh token cookie
+        authService.addCookieToTheResponse(response, authService.createRefreshTokenCookie(updatedRefreshToken));
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new ApiResponse<>(false,
+                        "Token refresh success!",
+                        new RefreshResponse(newAccessToken.getToken(),
+                                newAccessToken.getExpiredInSeconds(),
+                                updatedRefreshToken.getToken())));
+    }
+
+    /**
+     * Endpoint for new user registering.
+     */
+    @Operation(summary = "Register user.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "User registered successfully.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = RefreshResponse.class)) }),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "User with such username already exists.",
+                    content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "500", description = "No such role on server.",
+                    content = @Content)})
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest registerRequest) {
+        authService.register(registerRequest);
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new ApiResponse(false,
+                        "User registered successfully!"));
+    }
+
+    /**
+     * Endpoint to logout user.
+     * Operations:
+     * - Validate refresh token.
+     * - Withdraw refresh token.
+     */
+    @Operation(summary = "Logout user.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "User logged out successfully.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = RefreshResponse.class)) }),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "Refresh token failed validation.",
+                    content = @Content)})
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(
+            @CookieValue(name="RefreshToken") String refreshJwt) { // Don't forget to change annotation name if u changed it in app.props
+        // validate refresh token
+        final RefreshToken refreshToken = authService.validateRefreshTokenAndFetchItsModel(refreshJwt);
+        // withdraw refresh token
+        authService.withdrawRefreshToken(refreshToken);
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new ApiResponse(false,
+                        "User logged out successfully!"));
+    }
+
+}
