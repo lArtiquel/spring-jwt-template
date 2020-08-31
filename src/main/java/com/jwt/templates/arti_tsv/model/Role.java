@@ -1,9 +1,9 @@
-package com.jwt.model;
+package com.jwt.templates.arti_tsv.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-/** Roles collection model. */
+/** App roles model. */
 @Document(collection = "roles")
 public class Role {
 

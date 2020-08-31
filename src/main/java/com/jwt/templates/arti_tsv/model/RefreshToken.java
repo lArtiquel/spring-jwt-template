@@ -1,11 +1,11 @@
-package com.jwt.model;
+package com.jwt.templates.arti_tsv.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
- * Refresh token info model stored in db.
+ * Refresh token model.
  * Does not contain actual token, it only indicates that such token exists.
  */
 @Document(collection = "refresh_tokens")
@@ -22,7 +22,10 @@ public class RefreshToken {
     /** User id who owns the token. */
     private String userId;
 
-    /** Token expiration time */
+    /**
+     * Token expiration time.
+     * Field used to determine expired tokens in db rapidly.
+     */
     private Long expiredInSeconds;
 
     public RefreshToken(String userId, Long expiredInSeconds) {

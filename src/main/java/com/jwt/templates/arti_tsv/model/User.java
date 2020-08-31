@@ -1,4 +1,4 @@
-package com.jwt.model;
+package com.jwt.templates.arti_tsv.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -9,7 +9,7 @@ import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.Size;
 import java.util.Set;
 
-/** Users collection model. */
+/** User model. */
 @Document(collection = "users")
 public class User {
 
@@ -20,20 +20,34 @@ public class User {
     @Indexed(unique=true)
     @NotBlank
     @Size(max = 40)
-    private String username;
+    private String email;
 
     /** Hashed password */
     @NotBlank
     private String password;
 
     /** Set of user roles(referenced to the Roles collection) */
+    @NotBlank
     @DBRef
     private Set<Role> roles;
 
-    public User(@NotBlank @Size(max = 20) String username, @NotBlank String password, Set<Role> roles) {
-        this.username = username;
+    /**
+     * Token used for email verification.
+     */
+    private String emailVerificationToken;
+
+    /**
+     * Token used for password restoring.
+     */
+    private String passwordResetToken;
+
+    public User(@NotBlank @Size(max = 40) String email, @NotBlank String password,
+                @NotBlank Set<Role> roles, @NotBlank String emailVerificationToken) {
+        this.email = email;
         this.password = password;
         this.roles = roles;
+        this.emailVerificationToken = emailVerificationToken;
+        this.passwordResetToken = null;
     }
 
     public String getId() {
@@ -44,12 +58,12 @@ public class User {
         this.id = id;
     }
 
-    public String getUsername() {
-        return username;
+    public String getEmail() {
+        return email;
     }
 
-    public void setUsername(String username) {
-        this.username = username;
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public String getPassword() {
@@ -68,4 +82,19 @@ public class User {
         this.roles = roles;
     }
 
+    public String getEmailVerificationToken() {
+        return emailVerificationToken;
+    }
+
+    public void setEmailVerificationToken(String emailVerificationToken) {
+        this.emailVerificationToken = emailVerificationToken;
+    }
+
+    public String getPasswordResetToken() {
+        return passwordResetToken;
+    }
+
+    public void setPasswordResetToken(String passwordResetToken) {
+        this.passwordResetToken = passwordResetToken;
+    }
 }

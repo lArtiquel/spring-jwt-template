@@ -1,4 +1,4 @@
-package com.jwt.payload.request;
+package com.jwt.templates.arti_tsv.payload.request;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -9,7 +9,7 @@ import lombok.NonNull;
 public class RegisterRequest {
 
     @NonNull
-    private String username;
+    private String email;
 
     @NonNull
     private String password;
