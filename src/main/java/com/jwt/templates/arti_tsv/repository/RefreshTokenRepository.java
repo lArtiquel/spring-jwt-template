@@ -1,6 +1,6 @@
-package com.jwt.repository;
+package com.jwt.templates.arti_tsv.repository;
 
-import com.jwt.model.RefreshToken;
+import com.jwt.templates.arti_tsv.model.RefreshToken;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.Optional;
