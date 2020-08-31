@@ -8,7 +8,7 @@
 		<version>2.3.1.RELEASE</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.jwt.templates.art</groupId>
+	<groupId>com.jwt.templates.arti_tsv</groupId>
 	<artifactId>SpringJwtTemplate</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>SpringJwtTemplate</name>
@@ -85,26 +85,27 @@
 			<version>1.2.32</version>
 		</dependency>
 
+		<!-- JavaMail -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+			<version>2.2.5.RELEASE</version>
+		</dependency>
+
 	</dependencies>
 
 	<build>
 		<plugins>
-			<!-- Heroku Maven Plugin Configuration -->
-			<!-- Run mvn clean heroku:deploy in you have Heroku CLI -->
-			<!-- Not working as expected, its easier to do that from CLI -->
+			<!-- Heroku deploy command: mvn heroku:deploy-only -e -->
 			<plugin>
 				<groupId>com.heroku.sdk</groupId>
 				<artifactId>heroku-maven-plugin</artifactId>
-				<version>2.0.3</version>
+				<version>3.0.3</version>
 				<configuration>
 					<appName>spring-jwt-template</appName>
-					<includeTarget>false</includeTarget>
-					<includes>
-						<include>${project.build.directory}/${project.build.finalName}.jar</include>
-					</includes>
 					<jdkVersion>${java.version}</jdkVersion>
 					<processTypes>
-						<web>java -jar ${project.build.directory}/${project.build.finalName}.jar -Dserver.port=$PORT</web>
+						<web>java $JAVA_OPTS -jar target/${project.name}-${project.version}.jar --server.port=$PORT $JAR_OPTS</web>
 					</processTypes>
 				</configuration>
 			</plugin>
