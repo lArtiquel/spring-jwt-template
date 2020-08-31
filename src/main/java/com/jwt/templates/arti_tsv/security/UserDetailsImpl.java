@@ -1,7 +1,10 @@
-package com.jwt.security;
+package com.jwt.templates.arti_tsv.security;
 
-import com.jwt.model.User;
-import lombok.*;
+import com.jwt.templates.arti_tsv.model.User;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -11,17 +14,36 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /** Builds user details from passed user info. */
-@AllArgsConstructor
-@Data
+@RequiredArgsConstructor
 public class UserDetailsImpl implements UserDetails {
 
+    @NonNull
+    @Getter
+    @Setter
     private String id;
 
+    // this field is redundant in this app
+    // but it needed here because UserDetails have it
+    @Getter
     private String username;
 
+    @NonNull
+    @Getter
+    @Setter
+    private String email;
+
+    @NonNull
+    @Getter
+    @Setter
     private String password;
 
-    private Collection<? extends GrantedAuthority> authorities;
+    @NonNull
+    @Getter
+    @Setter
+    private Collection<GrantedAuthority> authorities;
+
+    @NonNull
+    private Boolean isEnabled;
 
     public static UserDetailsImpl build(User user) {
         Set<GrantedAuthority> authorities = user.getRoles()
@@ -31,14 +53,10 @@ public class UserDetailsImpl implements UserDetails {
 
         return new UserDetailsImpl(
                 user.getId(),
-                user.getUsername(),
+                user.getEmail(),
                 user.getPassword(),
-                authorities);
-    }
-
-    @Override
-    public Collection<? extends GrantedAuthority> getAuthorities() {
-        return authorities;
+                authorities,
+                user.getEmailVerificationToken() == null);
     }
 
     @Override
@@ -58,7 +76,7 @@ public class UserDetailsImpl implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return isEnabled;
     }
 
 }

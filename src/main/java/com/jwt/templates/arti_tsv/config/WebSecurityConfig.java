@@ -1,12 +1,15 @@
-package com.jwt.config;
+package com.jwt.templates.arti_tsv.config;
 
-import com.jwt.security.JwtAuthFailureHandler;
-import com.jwt.security.JwtAuthFilter;
-import com.jwt.service.UserDetailsServiceImpl;
+import com.jwt.templates.arti_tsv.security.AuthenticationProviderImpl;
+import com.jwt.templates.arti_tsv.security.jwt.JwtAuthenticationFailureHandler;
+import com.jwt.templates.arti_tsv.security.jwt.JwtAuthenticationFilter;
+import com.jwt.templates.arti_tsv.service.UserDetailsServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -28,33 +31,45 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
         prePostEnabled = true)
 public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
 
+    @Value("${app.config.permitAllRoutes}")
+    private String[] permitAllRoutes;
+
     /** Service used to fetch UserDetails */
     private UserDetailsServiceImpl userDetailsService;
     /** Used to commence http request properly */
-    private JwtAuthFailureHandler unauthorizedHandler;
+    private JwtAuthenticationFailureHandler unauthorizedHandler;
     /** Jwt authentication filter */
-    private JwtAuthFilter jwtAuthFilter;
+    private JwtAuthenticationFilter jwtAuthFilter;
 
     @Autowired
-    public WebSecurityConfig(UserDetailsServiceImpl userDetailsService, JwtAuthFailureHandler unauthorizedHandler, JwtAuthFilter jwtAuthFilter) {
+    public WebSecurityConfig(UserDetailsServiceImpl userDetailsService, JwtAuthenticationFailureHandler unauthorizedHandler,
+                             JwtAuthenticationFilter jwtAuthFilter) {
         this.userDetailsService = userDetailsService;
         this.unauthorizedHandler = unauthorizedHandler;
         this.jwtAuthFilter = jwtAuthFilter;
+
     }
 
-    /** BCrypt password encoder */
+    /**
+     * Create BCrypt password encoder bean.
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
     /**
-     * Configure authentication manager.
-     * Make it use our user details service with BCrypt password encoder.
+     * Create custom authentication provider bean.
      */
+    @Bean
+    public AuthenticationProvider authenticationProvider() {
+        return new AuthenticationProviderImpl(userDetailsService, passwordEncoder());
+    }
+
+    /** Configure authentication manager (provide custom authentication provider). */
     @Override
-    public void configure(AuthenticationManagerBuilder authenticationManagerBuilder) throws Exception {
-        authenticationManagerBuilder.userDetailsService(userDetailsService).passwordEncoder(passwordEncoder());
+    protected void configure(AuthenticationManagerBuilder authManager) throws Exception {
+        authManager.authenticationProvider(authenticationProvider());
     }
 
     /** Create authentication manager bean. */
@@ -64,20 +79,28 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
         return super.authenticationManagerBean();
     }
 
+//    /** Configure WebSecurity */
+//    @Override
+//    public void configure(WebSecurity web) throws Exception {
+//        // any static resources here
+//        web.ignoring().antMatchers(HttpMethod.GET, "/**");
+//    }
+
+    /** Configure HttpSecurity */
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
-                .cors().and().csrf().disable()
+                .cors().and()   // adds the Spring-provided CorsFilter to the application context which bypasses the authorization checks for OPTIONS requests.
+                .csrf().disable()   // disable CSRF token checks on server
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling().authenticationEntryPoint(unauthorizedHandler)
-            .and()
+                .and()
                 .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            .and()
+                .and()
                 .authorizeRequests()
-                .antMatchers("/api/board/admin").hasRole("ADMIN")
+                .antMatchers(permitAllRoutes).permitAll()
                 .antMatchers("/api/board/user").hasRole("USER")
-                .antMatchers("/api/auth/logout", "/api/auth/refresh").hasAnyRole("USER", "ADMIN")
-                .antMatchers("/api/auth/**", "/api/board/all").permitAll();
+                .antMatchers("/api/board/admin").hasRole("ADMIN");
     }
 
 }
