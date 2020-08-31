@@ -1,0 +1,242 @@
+package com.jwt.templates.arti_tsv.controller;
+
+import com.jwt.templates.arti_tsv.model.AccessToken;
+import com.jwt.templates.arti_tsv.model.RefreshToken;
+import com.jwt.templates.arti_tsv.payload.request.LoginRequest;
+import com.jwt.templates.arti_tsv.payload.request.RegisterRequest;
+import com.jwt.templates.arti_tsv.payload.response.AuthorizationInfoResponse;
+import com.jwt.templates.arti_tsv.payload.response.PlainMessageResponse;
+import com.jwt.templates.arti_tsv.security.jwt.JwtAuthenticityTokenImpl;
+import com.jwt.templates.arti_tsv.service.AuthService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
+import java.util.Collection;
+
+/**
+ * Class provides authentication endpoints.
+ */
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+
+    private AuthService authService;
+
+    @Autowired
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+    @Operation(summary = "Register user.")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200", description = "Registered successfully.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = PlainMessageResponse.class)) }),
+            @ApiResponse(
+                    responseCode = "409", description = "User with such email already exists/.",
+                    content = @Content),
+            @ApiResponse(
+                    responseCode = "500", description = "No such role on server.",
+                    content = @Content)})
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest registerRequest) {
+        authService.preRegisterCheck(registerRequest);
+        authService.register(registerRequest);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new PlainMessageResponse("Registered successfully. Verify email and try to login!"));
+    }
+
+    @Operation(summary = "Verify email.")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200", description = "Email verified.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = PlainMessageResponse.class)) }),
+            @ApiResponse(
+                    responseCode = "404", description = "User with such email is not found.",
+                    content = @Content),
+            @ApiResponse(
+                    responseCode = "409", description = "Wrong email verification token!",
+                    content = @Content)})
+    @PostMapping(value = "/verify-email", params = "token")
+    public ResponseEntity<?> verifyEmail(@RequestParam String token) {
+        authService.verifyEmail(token);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new PlainMessageResponse("Email successfully verified. Now try to login!"));
+    }
+
+    @Operation(summary = "Cancel account created with that email.")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200", description = "Account with that email canceled.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = PlainMessageResponse.class)) }),
+            @ApiResponse(
+                    responseCode = "404", description = "User with such email is not found.",
+                    content = @Content),
+            @ApiResponse(
+                    responseCode = "409", description = "Wrong email verification token.",
+                    content = @Content)})
+    @PostMapping(value = "/cancel-account", params = "token")
+    public ResponseEntity<?> cancelAccount(@RequestParam String token) {
+        authService.cancelAccount(token);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new PlainMessageResponse("Account with that email successfully canceled. Thank you!"));
+    }
+
+    @Operation(summary = "Login user.")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200", description = "User logged in successfully.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = AuthorizationInfoResponse.class))}),
+            @ApiResponse(
+                    responseCode = "401", description = "User not found/wrong credentials provided/account unverified.",
+                    content = @Content)})
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest) {
+        // authenticate user with provided credentials and get jwt authorization token
+        JwtAuthenticityTokenImpl authenticityToken = authService.authenticateUser(loginRequest);
+        // get names of user authorities
+        Collection<String> namesOfAuthorities = authService.getNamesOfAuthorities(authenticityToken.getAuthorities());
+        // issue new access and refresh tokens
+        AccessToken accessToken = authService.generateAccessToken(authenticityToken.getPrincipal(),
+                namesOfAuthorities);
+        RefreshToken refreshToken = authService.generateRefreshToken(authenticityToken.getPrincipal());
+        // publish login event
+        authService.publishLoginEvent(authenticityToken.getPrincipal());
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new AuthorizationInfoResponse(accessToken.getToken(),
+                        refreshToken.getToken(),
+                        namesOfAuthorities));
+    }
+
+    @Operation(summary = "Reset password for provided email.")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200", description = "Reset password mail send to provided email.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = PlainMessageResponse.class)) }),
+            @ApiResponse(
+                    responseCode = "404", description = "User with such email is not found.",
+                    content = @Content)})
+    @PostMapping(value = "/reset-password-for-email", params = "email")
+    public ResponseEntity<?> resetPasswordForEmail(@RequestParam String email) {
+        authService.resetPasswordForEmail(email);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new PlainMessageResponse("Reset password mail send to provided email. Check the mailbox!"));
+    }
+
+    @Operation(summary = "Reset password.")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200", description = "Password reset success",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = PlainMessageResponse.class)) }),
+            @ApiResponse(
+                    responseCode = "404", description = "User with such email is not found.",
+                    content = @Content),
+            @ApiResponse(
+                    responseCode = "409", description = "New token for password restoring issued.",
+                    content = @Content),
+            @ApiResponse(
+                    responseCode = "409", description = "Wrong or expired reset password token.",
+                    content = @Content)})
+    @PostMapping(value = "/reset-password", params = {"token", "newPassword"})
+    public ResponseEntity<?> resetPassword(@RequestParam String token, @RequestParam String newPassword) {
+        authService.resetPassword(token, newPassword);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new PlainMessageResponse("Password successfully changed. Now try to login!"));
+    }
+
+    @Operation(summary = "Cancel reset password operation.")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200", description = "Password reset operation successfully canceled.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = PlainMessageResponse.class)) }),
+            @ApiResponse(
+                    responseCode = "404", description = "User with such email is not found.",
+                    content = @Content),
+            @ApiResponse(
+                    responseCode = "409", description = "Wrong or expired reset password token.",
+                    content = @Content)})
+    @PostMapping(value = "/cancel-password-reset", params = "token")
+    public ResponseEntity<?> cancelPasswordReset(@RequestParam String token) {
+        authService.cancelPasswordReset(token);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new PlainMessageResponse("Password reset token successfully canceled!"));
+    }
+
+    @Operation(summary = "Refresh tokens.")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200", description = "Token refreshed successfully.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = AuthorizationInfoResponse.class)) }),
+            @ApiResponse(
+                    responseCode = "401", description = "Invalid token.",
+                    content = @Content)})
+    @PostMapping(value="/refresh", params = "token")
+    public ResponseEntity<?> refresh(@RequestParam String token) {
+        // validate provided refresh token and fetch its model
+        RefreshToken refreshTokenModel = authService.validateRefreshTokenAndFetchItsModel(token);
+        // get names of user authorities
+        Collection<String> namesOfAuthorities = authService.getNamesOfUserAuthoritiesByUserId(refreshTokenModel.getUserId());
+        // generate new access token and update refresh token
+        AccessToken accessTokenModel = authService.generateAccessToken(refreshTokenModel.getUserId(),
+                namesOfAuthorities);
+        refreshTokenModel = authService.updateRefreshToken(refreshTokenModel);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new AuthorizationInfoResponse(accessTokenModel.getToken(),
+                        refreshTokenModel.getToken(),
+                        namesOfAuthorities));
+    }
+
+    @Operation(summary = "Logout user.")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200", description = "Logged out successfully.",
+                    content = { @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = PlainMessageResponse.class)) }),
+            @ApiResponse(
+                    responseCode = "401", description = "Refresh token failed validation.",
+                    content = @Content)})
+    @PostMapping(value = "/logout", params = "token")
+    public ResponseEntity<?> logout(@RequestParam String token) {
+        // validate refresh token
+        RefreshToken refreshToken = authService.validateRefreshTokenAndFetchItsModel(token);
+        // withdraw refresh token
+        authService.withdrawRefreshToken(refreshToken);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(new PlainMessageResponse("Logged out successfully!"));
+    }
+
+}
